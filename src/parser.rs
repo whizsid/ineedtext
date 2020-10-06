@@ -47,11 +47,6 @@ pub enum LangItemKind {
     Parser(Box<dyn Parser>)
 }
 
-pub enum ParserAllow {
-    r#String(Box<dyn Parser>),
-    Parser(Box<dyn Parser>)
-}
-
 pub enum WatchMode {
     Parser,
     r#String
@@ -62,11 +57,21 @@ pub trait Parser {
 
     fn end(&self) -> Option<Matcher>;
 
-    fn parsers(&self)-> Vec<ParserAllow>;
+    fn in_str_parsers(&self)-> Vec<Box<dyn Parser>> {
+        vec!()
+    }
+
+    fn in_full_str_parsers(&self) -> Vec<Box<dyn Parser>> {
+        vec!()
+    }
+
+    fn in_parser_parsers(&self) -> Vec<Box<dyn Parser>> {
+        vec!()
+    }
 
     fn strings(&self)-> Vec<Box<dyn LangItem>>;
 
-    fn string_check(&self)-> Option<Matcher>;
+    fn string_check(&self)-> Option<Regex>;
 
     fn blocks(&self)-> Vec<(Matcher, Matcher)>;
 }

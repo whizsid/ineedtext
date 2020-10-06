@@ -1,4 +1,5 @@
-use crate::parser::{Parser, LangItem, ParserAllow, Matcher};
+use crate::parser::{Parser, LangItem, Matcher};
+use crate::parsers::html::HTMLParser;
 use regex::Regex;
 
 pub struct PHPParser;
@@ -38,15 +39,15 @@ impl Parser for PHPParser {
         Some(Matcher::new(2,Regex::new("?>").unwrap()))
     }
 
-    fn parsers(&self)-> Vec<ParserAllow> {
-        vec!()
+    fn in_full_str_parsers(&self)-> Vec<Box<dyn Parser>> {
+        vec!(Box::new(HTMLParser))
     }
-
+    
     fn strings(&self)-> Vec<Box<dyn LangItem>> {
         vec!( Box::new(SingleQuoteString), Box::new(DoubleQuoteString) )
     }
 
-    fn string_check(&self) -> Option<Matcher> {
+    fn string_check(&self) -> Option<Regex> {
         None
     }
 

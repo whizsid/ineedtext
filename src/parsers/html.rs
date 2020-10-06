@@ -1,4 +1,4 @@
-use crate::parser::{Parser, LangItem, ParserAllow, Matcher};
+use crate::parser::{Parser, LangItem,  Matcher};
 use regex::Regex;
 use crate::parsers::php::PHPParser;
 
@@ -16,16 +16,18 @@ impl Parser for HTMLParser {
         None
     }
 
-    fn parsers(&self)-> Vec<ParserAllow> {
-        vec!(ParserAllow::String(Box::new(PHPParser)))
+    fn in_parser_parsers(&self)-> Vec<Box<dyn Parser>>{
+        vec!(
+            Box::new(PHPParser)    
+        )
     }
 
     fn strings(&self)-> Vec<Box<dyn LangItem>> {
         vec!()
     }
 
-    fn string_check(&self) -> Option<Matcher> {
-        Some(Matcher::new(250,Regex::new("\\<(.*?)(\\s|)(.*?)\\>").unwrap()))
+    fn string_check(&self) -> Option<Regex> {
+        Some(Regex::new("\\<(.*?)(\\s|)(.*?)\\>").unwrap())
     }
 
     fn blocks(&self)-> Vec<(Matcher, Matcher)> {

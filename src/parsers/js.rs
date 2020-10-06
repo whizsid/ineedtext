@@ -1,4 +1,4 @@
-use crate::parser::{Parser, LangItem, ParserAllow, Matcher};
+use crate::parser::{Parser, LangItem, Matcher};
 use regex::Regex;
 use crate::parsers::php::{PHPParser};
 use crate::parsers::html::HTMLParser;
@@ -53,11 +53,21 @@ impl Parser for JSParser {
         Some(Matcher::new(1,Regex::new("}").unwrap()))
     }
 
-    fn parsers(&self)-> Vec<ParserAllow> {
+    fn in_full_str_parsers(&self)-> Vec<Box<dyn Parser>> {
         vec!(
-            ParserAllow::String(Box::new(PHPParser)), 
-            ParserAllow::Parser(Box::new(PHPParser)),
-            ParserAllow::String(Box::new(HTMLParser))
+            Box::new(HTMLParser)    
+        )
+    }
+
+    fn in_str_parsers(&self)-> Vec<Box<dyn Parser>> {
+        vec!(
+            Box::new(PHPParser)
+        )
+    }
+
+    fn in_parser_parsers(&self) -> Vec<Box<dyn Parser>>{
+        vec!(
+            Box::new(PHPParser)    
         )
     }
 
@@ -65,8 +75,8 @@ impl Parser for JSParser {
         vec!( Box::new(SingleQuoteString), Box::new(DoubleQuoteString), Box::new(BacktickString) )
     }
 
-    fn string_check(&self) -> Option<Matcher> {
-        Some(Matcher::new(10, Regex::new("(var|;|$)").unwrap()))
+    fn string_check(&self) -> Option<Regex> {
+        Some(Regex::new("(var|;|$)").unwrap())
     }
 
     fn blocks(&self)-> Vec<(Matcher, Matcher)> {
