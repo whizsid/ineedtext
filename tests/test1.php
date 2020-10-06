@@ -13,6 +13,10 @@ Welcome
 
 ?>
 
+ Third test
+
+<div id="html">Some id</div>
+
 
 
 <?php require_once "footer.php" ?>
