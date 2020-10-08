@@ -1,7 +1,7 @@
 use crate::parser::{LangItem, Language, Matcher, Parser, UniId};
+use crate::parsers::css::CSSParser;
 use crate::parsers::html::HTMLParser;
 use crate::parsers::php::PHPParser;
-use crate::parsers::css::CSSParser;
 use onig::Regex;
 
 #[derive(Clone)]
@@ -23,7 +23,7 @@ impl LangItem for SingleQuoteString {
         "js_single_quote"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::JSSingleQuoteString
     }
 }
@@ -44,7 +44,7 @@ impl LangItem for DoubleQuoteString {
         "js_double_quote"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::JSDoubleQuoteString
     }
 }
@@ -65,7 +65,7 @@ impl LangItem for BacktickString {
         "js_backtick"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::JSBacktickString
     }
 }
@@ -85,7 +85,7 @@ impl LangItem for Scope {
         "js_scope"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::JSScope
     }
 }
@@ -105,8 +105,50 @@ impl LangItem for Parentheses {
         "js_parentheses"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::JSParentheses
+    }
+}
+
+#[derive(Clone)]
+pub struct SingleLineComment;
+
+impl LangItem for SingleLineComment {
+    fn start(&self) -> Matcher {
+        Matcher::new(Some(2), Regex::new("\\/\\/").unwrap())
+    }
+
+    fn end(&self) -> Matcher {
+        Matcher::new(Some(1), Regex::new("\\n").unwrap())
+    }
+
+    fn id(&self) -> &str {
+        "js_single_line_comment"
+    }
+
+    fn uni_id(&self) -> UniId {
+        UniId::JSSingleLineComment
+    }
+}
+
+#[derive(Clone)]
+pub struct MultiLineComment;
+
+impl LangItem for MultiLineComment {
+    fn start(&self) -> Matcher {
+        Matcher::new(Some(2), Regex::new("\\/\\*").unwrap())
+    }
+
+    fn end(&self) -> Matcher {
+        Matcher::new(Some(2), Regex::new("\\*\\/").unwrap())
+    }
+
+    fn id(&self) -> &str {
+        "js_multi_line_comment"
+    }
+
+    fn uni_id(&self) -> UniId {
+        UniId::JSMultiLineComment
     }
 }
 
@@ -115,12 +157,15 @@ impl Parser for JSParser {
         Some(Matcher::new(Some(20), Regex::new("<script(.*?)>").unwrap()))
     }
 
-    fn in_string_start(&self)-> Option<Matcher>{
+    fn in_string_start(&self) -> Option<Matcher> {
         Some(Matcher::new(Some(2), Regex::new("\\${").unwrap()))
     }
 
     fn end(&self) -> Option<Matcher> {
-        Some(Matcher::new(Some(20), Regex::new("</script(.*?|)>").unwrap()))
+        Some(Matcher::new(
+            Some(20),
+            Regex::new("</script(.*?|)>").unwrap(),
+        ))
     }
 
     fn in_string_end(&self) -> Option<Matcher> {
@@ -147,6 +192,10 @@ impl Parser for JSParser {
         ]
     }
 
+    fn comments(&self) -> Vec<Box<dyn LangItem>> {
+        vec![Box::new(SingleLineComment), Box::new(MultiLineComment)]
+    }
+
     fn string_check(&self) -> Option<Regex> {
         Some(Regex::new("(.*?)(var|;|\\$)(.*?)").unwrap())
     }
@@ -159,7 +208,7 @@ impl Parser for JSParser {
         Language::JS
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::JSParser
     }
 }

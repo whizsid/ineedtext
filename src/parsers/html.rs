@@ -14,19 +14,19 @@ impl LangItem for Tag {
     fn start(&self) -> Matcher {
         Matcher::new(
             None,
-            Regex::new("<(?!(input|img|br|hr))[A-Za-z]+(\\s|)(.*?)[^\\?]>").unwrap(),
+            Regex::new("<(?!(input|img|br|hr))[A-Za-z]+(\\s|)(.*?)[^\\?-]>").unwrap(),
         )
     }
 
     fn end(&self) -> Matcher {
-        Matcher::new(Some(100), Regex::new("<\\/(.*?)>").unwrap())
+        Matcher::new(Some(100), Regex::new("<\\/(.*?)([^\\?-]|)>").unwrap())
     }
 
     fn id(&self) -> &str {
         "html_tag"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::HTMLTag
     }
 }
@@ -35,10 +35,7 @@ impl LangItem for Tag {
 pub struct Comment;
 impl LangItem for Comment {
     fn start(&self) -> Matcher {
-        Matcher::new(
-            Some(4),
-            Regex::new("<\\!--").unwrap(),
-        )
+        Matcher::new(Some(4), Regex::new("<\\!--").unwrap())
     }
 
     fn end(&self) -> Matcher {
@@ -49,7 +46,7 @@ impl LangItem for Comment {
         "html_comment"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::HTMLComment
     }
 }
@@ -76,7 +73,11 @@ impl Parser for HTMLParser {
     }
 
     fn blocks(&self) -> Vec<Box<dyn LangItem>> {
-        vec![Box::new(Comment),Box::new(Tag)]
+        vec![Box::new(Tag)]
+    }
+
+    fn comments(&self) -> Vec<Box<dyn LangItem>> {
+        vec![Box::new(Comment)]
     }
 
     fn search_mode(&self) -> SearchMode {
@@ -93,11 +94,11 @@ impl Parser for HTMLParser {
                 None,
                 Regex::new("<(input|img|br|hr|\\!)(\\s|)(.*?|)[^\\?\\!]>").unwrap(),
             ),
-            Matcher::new(Some(100), Regex::new("<\\/(.*?|)([^\\?\\!]|)>").unwrap())
+            Matcher::new(Some(100), Regex::new("<\\/(.*?|)([^\\?\\!]|)>").unwrap()),
         ]
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::HTMLParser
     }
 }

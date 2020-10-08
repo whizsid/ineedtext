@@ -30,7 +30,10 @@ impl Parser for CSSParser {
     }
 
     fn end(&self) -> Option<Matcher> {
-        Some(Matcher::new(Some(20), Regex::new("</style(.*?|)>").unwrap()))
+        Some(Matcher::new(
+            Some(20),
+            Regex::new("</style(.*?|)>").unwrap(),
+        ))
     }
 
     fn in_string_end(&self) -> Option<Matcher> {
@@ -42,13 +45,11 @@ impl Parser for CSSParser {
     }
 
     fn strings(&self) -> Vec<Box<dyn LangItem>> {
-        vec![
-            
-        ]
+        vec![]
     }
 
     fn string_check(&self) -> Option<Regex> {
-        Some(Regex::new("[a-z-]+(\\s+|):(\\s+|)[a-z-]+").unwrap())
+        Some(Regex::new("(.*|)[a-z-]+(\\s+|):(\\s+|)[a-z-]+(.*|)").unwrap())
     }
 
     fn blocks(&self) -> Vec<Box<dyn LangItem>> {
@@ -59,7 +60,7 @@ impl Parser for CSSParser {
         Language::CSS
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::CSSParser
     }
 }

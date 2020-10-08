@@ -6,17 +6,24 @@ Welcome
 
 	$string = "Welcome!";
 
+	// Single Line comment and "Double quotes" and 'Single Quotes' /*  */
+	// Another Single Line comment 'comment'
 
-	if {
+	if (true) {
 		$string = "Hy!".$string." How are you!";
 	}
 
 	"Welcome\" Escaped";
 
-	$string = "display:none"
+	/**
+	 *
+	 * Multiline comment with 'quotes' and //sinle line comments
+	 */
+
+	$string = "display:none";
 
 	$string = 'Single Quote String';
-	if {
+	if (true){
 
 		$array['index'];
 
@@ -42,6 +49,8 @@ Welcome
 		$column_name = "tbl_area.col_name";
 
 		$column_name = "col_name";
+
+		$sub_str = "My name is 'gunadasa' ";
 
 ?>
 

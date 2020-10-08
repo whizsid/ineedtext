@@ -1,12 +1,12 @@
+use dyn_clone::DynClone;
 use onig::Regex;
 use std::fmt::{Debug, Formatter};
 use std::io::Cursor;
 use std::io::{Read, Seek, SeekFrom};
-use dyn_clone::DynClone;
 
 pub struct Matcher(Option<u16>, Regex);
 
-pub const MAX_SEARCH_LENGTH:usize = 1000;
+pub const MAX_SEARCH_LENGTH: usize = 1000;
 
 impl Matcher {
     pub fn new(max_size: Option<u16>, reg: Regex) -> Matcher {
@@ -37,10 +37,10 @@ impl Matcher {
                 }
             }
             None => {
-                let mut main_buf = vec!();
-                let mut i =0;
+                let mut main_buf = vec![];
+                let mut i = 0;
                 loop {
-                    let mut buf = [0;1];
+                    let mut buf = [0; 1];
 
                     file_mut.read(&mut buf).ok()?;
 
@@ -56,11 +56,11 @@ impl Matcher {
                         return Some(word);
                     }
 
-                    if i>=MAX_SEARCH_LENGTH {
+                    if i >= MAX_SEARCH_LENGTH {
                         break;
                     }
 
-                    i+=1;
+                    i += 1;
                 }
             }
         }
@@ -94,13 +94,16 @@ pub enum LangItemKind {
     r#String(Box<dyn LangItem>),
     Parser(Box<dyn Parser>),
     Block(Box<dyn LangItem>),
+    Comment(Box<dyn LangItem>),
 }
 
 impl LangItemKind {
-    pub fn uni_id(&self)->UniId{
+    pub fn uni_id(&self) -> UniId {
         match self {
-            LangItemKind::Parser(item)=>item.uni_id(),
-            LangItemKind::String(item)|LangItemKind::Block(item)=> item.uni_id()
+            LangItemKind::Parser(item) => item.uni_id(),
+            LangItemKind::String(item)
+            | LangItemKind::Block(item)
+            | LangItemKind::Comment(item) => item.uni_id(),
         }
     }
 }
@@ -109,7 +112,9 @@ impl Debug for LangItemKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Parser(parser) => f.write_str(&format!("{:?}", parser)),
-            Self::Block(li) | Self::String(li) => f.write_str(&format!("{:?}", li)),
+            Self::Block(li) | Self::String(li) | Self::Comment(li) => {
+                f.write_str(&format!("{:?}", li))
+            }
         }
     }
 }
@@ -136,17 +141,21 @@ pub enum UniId {
     PHPDoubleQuoteStringOnlyTrimmedEnd,
     PHPScope,
     PHPParentheses,
+    PHPSingleLineComment,
+    PHPMultiLineComment,
     JSParser,
     JSSingleQuoteString,
     JSDoubleQuoteString,
     JSBacktickString,
     JSScope,
     JSParentheses,
+    JSSingleLineComment,
+    JSMultiLineComment,
     CSSParser,
     CSSScope,
     HTMLParser,
     HTMLTag,
-    HTMLComment
+    HTMLComment,
 }
 
 impl SearchMode {
@@ -195,6 +204,10 @@ pub trait Parser: DynClone {
     fn string_check(&self) -> Option<Regex>;
 
     fn blocks(&self) -> Vec<Box<dyn LangItem>>;
+
+    fn comments(&self) -> Vec<Box<dyn LangItem>> {
+        vec![]
+    }
 
     fn search_mode(&self) -> SearchMode {
         SearchMode::String
@@ -249,10 +262,15 @@ mod test {
             Some(String::from("<?php"))
         );
         assert_eq!(matcher_failed.eat(&mut cursor), None);
-        assert_eq!(matcher_without_size.eat(&mut cursor), Some(String::from("<?php")));
+        assert_eq!(
+            matcher_without_size.eat(&mut cursor),
+            Some(String::from("<?php"))
+        );
         assert_eq!(matcher_failed.eat(&mut cursor), None);
-        assert_eq!(matcher_success.eat(&mut cursor), Some(String::from("<?php")));
+        assert_eq!(
+            matcher_success.eat(&mut cursor),
+            Some(String::from("<?php"))
+        );
         assert_eq!(matcher_success.eat(&mut cursor), None);
-
     }
 }

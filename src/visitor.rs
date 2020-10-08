@@ -14,7 +14,6 @@ pub struct Visitor<T: Read + Seek> {
     cursor: Cursor<T>,
     fake_cur_pos: u64,
     force_php_item: Option<UniId>,
-    in_comment: bool,
 }
 
 pub fn can_ignore(txt: &str) -> bool {
@@ -23,9 +22,10 @@ pub fn can_ignore(txt: &str) -> bool {
     let patterns = vec![
         Regex::new("(.*)[a-zA-Z0-9]\\.[a-zA-Z-0-9](.*)").unwrap(),
         Regex::new("(.*)[a-zA-Z0-9]_[a-zA-Z0-9](.*)").unwrap(),
+        Regex::new("(.*)[a-zA-Z0-9]-[a-zA-Z0-9](.*)").unwrap(),
         Regex::new("(select|SELECT)(.*?)(from|FROM)(.*)").unwrap(),
         Regex::new("(insert|INSERT)(.*?)(into|INTO)(.*)").unwrap(),
-        Regex::new("(DELETE|delete)(.*?)(from|FROM)(.*)").unwrap(),
+        Regex::new("(DELETE|delete)([\\n\\s]+)(from|FROM)(.*)").unwrap(),
         Regex::new("(UPDATE|update)(.*?)(set|SET)(.*)").unwrap(),
         Regex::new("(.*)\\.php").unwrap(),
         Regex::new("^((?![a-zA-Z]).)*$").unwrap(),
@@ -47,7 +47,6 @@ impl<T: Read + Seek> Visitor<T> {
             cursor: cur,
             fake_cur_pos: 0,
             force_php_item: None,
-            in_comment: false,
         }
     }
 
@@ -116,8 +115,9 @@ impl<T: Read + Seek> Visitor<T> {
     fn format_buf(&mut self, buf: &str, level: LangItemKind) -> Option<Occurrence> {
         let cursor = self.cursor();
 
-        let end_trimmed =
-            buf.trim_end_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != ')');
+        let end_trimmed = buf.trim_end_matches(|c: char| {
+            !c.is_alphanumeric() && c != '.' && c != ')' && c != '\'' && c != '"'
+        });
 
         let trimmed = end_trimmed.trim_start_matches(|c: char| !c.is_alphanumeric() && c != '(');
 
@@ -256,6 +256,15 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
                     }
                 }
                 LangItemKind::String(_) => {}
+                LangItemKind::Comment(comment) => match comment.end().eat(&mut self.cursor) {
+                    Some(_) => {
+                        self.end_level();
+                        continue;
+                    }
+                    None => {
+                        self.eat_next_chars(1);
+                    }
+                },
                 _ => {
                     let force_php_level: Option<LangItemKind> = match &self.force_php_item {
                         Some(item) => match item {
@@ -270,66 +279,48 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
                         None => None,
                     };
                     let parser = match last_level {
-                        LangItemKind::Parser(parser) => {
-                            if !self.in_comment {
-                                match parser.end() {
-                                    Some(end) => {
-                                        match end
-                                            .eat(&mut self.cursor)
-                                            .map(|i| Some(i))
-                                            .unwrap_or_else(|| {
-                                                self.last_parser()?
-                                                    .in_string_end()?
-                                                    .eat(&mut self.cursor)
-                                            }) {
-                                            Some(ate) => {
-                                                let parser = self.end_level()?;
+                        LangItemKind::Parser(parser) => match parser.end() {
+                            Some(end) => {
+                                match end.eat(&mut self.cursor).map(|i| Some(i)).unwrap_or_else(
+                                    || self.last_parser()?.in_string_end()?.eat(&mut self.cursor),
+                                ) {
+                                    Some(ate) => {
+                                        let parser = self.end_level()?;
 
-                                                if let LangItemKind::Parser(parser) = parser {
-                                                    if let SearchMode::Parser = parser.search_mode()
-                                                    {
-                                                        self.update_cursor(ate.len() + buf.len());
+                                        if let LangItemKind::Parser(parser) = parser {
+                                            if let SearchMode::Parser = parser.search_mode() {
+                                                self.update_cursor(ate.len() + buf.len());
 
-                                                        match self.format_buf(
-                                                            &buf,
-                                                            LangItemKind::Parser(parser),
-                                                        ) {
-                                                            Some(buf) => {
-                                                                return Some(buf);
-                                                            }
-                                                            None => {
-                                                                buf.clear();
-                                                            }
-                                                        };
+                                                match self
+                                                    .format_buf(&buf, LangItemKind::Parser(parser))
+                                                {
+                                                    Some(buf) => {
+                                                        return Some(buf);
                                                     }
-                                                }
-
-                                                continue;
+                                                    None => {
+                                                        buf.clear();
+                                                    }
+                                                };
                                             }
-                                            None => self.last_parser()?,
                                         }
+
+                                        continue;
                                     }
-                                    None => parser,
+                                    None => self.last_parser()?,
                                 }
-                            } else {
-                                parser
                             }
-                        }
+                            None => parser,
+                        },
                         LangItemKind::Block(block) => {
                             match block.end().eat(&mut self.cursor) {
                                 Some(ate) => {
                                     let level = self.end_level()?;
-                            
-
-                                    if let UniId::HTMLComment = level.uni_id() {
-                                        self.in_comment = false;
-                                    }
 
                                     let parser = self.last_parser()?;
-                                    
+
                                     if let SearchMode::Parser = parser.search_mode() {
                                         self.update_cursor(ate.len() + buf.len());
-                        
+
                                         match self.format_buf(
                                             &buf,
                                             force_php_level.unwrap_or(level.clone()),
@@ -350,282 +341,309 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
 
                             let parser = self.last_parser()?;
 
-                            if !self.in_comment {
-                                match parser.end() {
-                                    Some(end) => match end
-                                        .eat(&mut self.cursor)
-                                        .map(|i| Some(i))
-                                        .unwrap_or_else(|| {
-                                            self.last_parser()?
-                                                .in_string_end()?
-                                                .eat(&mut self.cursor)
-                                        }) {
-                                        Some(_) => {
-                                            loop {
-                                                match self.last_level()? {
-                                                    LangItemKind::Parser(_) => {
-                                                        self.end_level();
-                                                        break;
-                                                    }
-                                                    _ => {
-                                                        self.end_level();
-                                                    }
+                            match parser.end() {
+                                Some(end) => match end
+                                    .eat(&mut self.cursor)
+                                    .map(|i| Some(i))
+                                    .unwrap_or_else(|| {
+                                        self.last_parser()?.in_string_end()?.eat(&mut self.cursor)
+                                    }) {
+                                    Some(_) => {
+                                        loop {
+                                            match self.last_level()? {
+                                                LangItemKind::Parser(_) => {
+                                                    self.end_level();
+                                                    break;
+                                                }
+                                                _ => {
+                                                    self.end_level();
                                                 }
                                             }
-
-                                            continue;
                                         }
-                                        None => {}
-                                    },
+
+                                        continue;
+                                    }
                                     None => {}
-                                }
+                                },
+                                None => {}
                             }
+
                             self.last_parser()?
                         }
                         _ => unimplemented!(),
                     };
 
-                    if !self.in_comment {
-                        let prev_str = self.levels.iter().rev().find_map(|i| match i {
-                            LangItemKind::String(str_type) => Some(str_type),
-                            _ => None,
+                    let prev_str = self.levels.iter().rev().find_map(|i| match i {
+                        LangItemKind::String(str_type) => Some(str_type),
+                        _ => None,
+                    });
+
+                    let parsers = parser.in_parser_parsers();
+                    let blocks = parser.blocks();
+                    let strs = parser.strings();
+                    let ignore = parser.ignore();
+                    let comments = parser.comments();
+
+                    if self.levels.len() > 1 {
+                        let opt_before_str = self.levels.iter().rev().find(|i| {
+                            if let LangItemKind::String(_) = i {
+                                true
+                            } else {
+                                false
+                            }
                         });
 
-                        let parsers = parser.in_parser_parsers();
-                        let blocks = parser.blocks();
-                        let strs = parser.strings();
-                        let ignore = parser.ignore();
+                        match opt_before_str {
+                            Some(before_last_item) => match parser.uni_id() {
+                                UniId::PHPParser => {}
+                                _ => match before_last_item {
+                                    LangItemKind::String(str_type) => {
+                                        let escaped_char =
+                                            if let Some(prev_char_a) = prev_char.clone() {
+                                                prev_char_a == "\\"
+                                            } else {
+                                                false
+                                            };
 
-                        if self.levels.len() > 1 {
-                            let opt_before_str = self.levels.iter().rev().find(|i| {
-                                if let LangItemKind::String(_) = i {
-                                    true
-                                } else {
-                                    false
-                                }
-                            });
-
-                            match opt_before_str {
-                                Some(before_last_item) => match parser.uni_id() {
-                                    UniId::PHPParser => {}
-                                    _ => match before_last_item {
-                                        LangItemKind::String(str_type) => {
-                                            
-                                            let escaped_char =
-                                                if let Some(prev_char_a) = prev_char.clone() {
-                                                    prev_char_a == "\\"
-                                                } else {
-                                                    false
-                                                };
-
-                                            if !escaped_char {
-                                                match str_type.end().eat(&mut self.cursor) {
-                                                    Some(ate) => {
-                                                        let parser: Option<Box<dyn Parser>>;
-                                                        loop {
-                                                            match self.end_level()? {
-                                                                LangItemKind::Parser(removed) => {
-                                                                    parser = Some(removed);
-                                                                    break;
-                                                                }
-                                                                _ => {}
+                                        if !escaped_char {
+                                            match str_type.end().eat(&mut self.cursor) {
+                                                Some(ate) => {
+                                                    let parser: Option<Box<dyn Parser>>;
+                                                    loop {
+                                                        match self.end_level()? {
+                                                            LangItemKind::Parser(removed) => {
+                                                                parser = Some(removed);
+                                                                break;
                                                             }
+                                                            _ => {}
                                                         }
-                                                        
-                                                        let str_type = self.end_level()?;
-
-                                                        let parser = parser?;
-                                                        if let SearchMode::Parser =
-                                                            parser.search_mode()
-                                                        {
-                                                            self.update_cursor(
-                                                                ate.len() + buf.len(),
-                                                            );
-
-                                                            let level = match str_type.uni_id() {
-                                                                UniId::PHPSingleQuoteString
-                                                                | UniId::PHPDoubleQuoteString => {
-                                                                    str_type
-                                                                }
-                                                                _ => LangItemKind::Parser(parser),
-                                                            };
-
-                                                            match self.format_buf(
-                                                                &buf,
-                                                                force_php_level.unwrap_or(level),
-                                                            ) {
-                                                                Some(buf) => {
-                                                                    return Some(buf);
-                                                                }
-                                                                None => {
-                                                                    buf.clear();
-                                                                }
-                                                            };
-                                                        }
-
-                                                        self.force_php_item = None;
-
-                                                        continue;
                                                     }
-                                                    None => {}
+
+                                                    let str_type = self.end_level()?;
+
+                                                    let parser = parser?;
+                                                    if let SearchMode::Parser = parser.search_mode()
+                                                    {
+                                                        self.update_cursor(ate.len() + buf.len());
+
+                                                        let level = match str_type.uni_id() {
+                                                            UniId::PHPSingleQuoteString
+                                                            | UniId::PHPDoubleQuoteString => {
+                                                                str_type
+                                                            }
+                                                            _ => LangItemKind::Parser(parser),
+                                                        };
+
+                                                        match self.format_buf(
+                                                            &buf,
+                                                            force_php_level.unwrap_or(level),
+                                                        ) {
+                                                            Some(buf) => {
+                                                                return Some(buf);
+                                                            }
+                                                            None => {
+                                                                buf.clear();
+                                                            }
+                                                        };
+                                                    }
+
+                                                    self.force_php_item = None;
+
+                                                    continue;
                                                 }
+                                                None => {}
                                             }
                                         }
-                                        _ => {}
-                                    },
+                                    }
+                                    _ => {}
                                 },
-                                None => {}
-                            }
-                        }
-
-                        for pattern in ignore {
-                            match pattern.eat(&mut self.cursor) {
-                                Some(ate) => {
-                                    let parser = self.last_parser()?;
-                                    let last_level = self.last_level()?.clone();
-                                    if let SearchMode::Parser = parser.search_mode() {
-                                        self.update_cursor(ate.len() + buf.len());
-                                        match self
-                                            .format_buf(&buf, force_php_level.unwrap_or(last_level))
-                                        {
-                                            Some(buf) => {
-                                                return Some(buf);
-                                            }
-                                            None => {
-                                                buf.clear();
-                                            }
-                                        };
-                                    }
-
-                                    continue 'outer;
-                                }
-                                None => {}
-                            }
-                        }
-
-                        for str_type in strs {
-                            match str_type.start().eat(&mut self.cursor) {
-                                Some(ate) => {
-                                    let last_level = self.last_level()?.clone();
-                                    self.start_level(LangItemKind::String(str_type));
-
-                                    let parser = self.last_parser()?;
-
-                                    if let SearchMode::Parser = parser.search_mode() {
-                                        self.update_cursor(ate.len() + buf.len());
-
-                                        match self
-                                            .format_buf(&buf, force_php_level.unwrap_or(last_level))
-                                        {
-                                            Some(buf) => {
-                                                return Some(buf);
-                                            }
-                                            None => buf.clear(),
-                                        };
-                                    }
-
-                                    continue 'outer;
-                                }
-                                None => {}
-                            }
-                        }
-
-                        for parser in parsers {
-                            match parser.start()?.eat(&mut self.cursor) {
-                                Some(ate) => {
-                                    let last_level = self.last_level()?.clone();
-                                    self.start_level(LangItemKind::Parser(parser));
-
-                                    let prev_parser = self
-                                        .levels
-                                        .iter()
-                                        .rev()
-                                        .enumerate()
-                                        .find_map(|(i, parser)| match parser {
-                                            LangItemKind::Parser(parser) if i != 0 => Some(parser),
-                                            _ => None,
-                                        })?;
-
-                                    if let SearchMode::Parser = prev_parser.search_mode() {
-                                        self.update_cursor(ate.len() + buf.len());
-
-                                        match self
-                                            .format_buf(&buf, force_php_level.unwrap_or(last_level))
-                                        {
-                                            Some(buf) => {
-                                                return Some(buf);
-                                            }
-                                            None => {
-                                                buf.clear();
-                                            }
-                                        };
-                                    }
-
-                                    continue 'outer;
-                                }
-                                None => {}
-                            }
-                        }
-
-                        for block in blocks {
-                            match block.start().eat(&mut self.cursor) {
-                                Some(ate) => {
-                                    let last_level = self.last_level()?.clone();
-
-                                    if let UniId::HTMLComment = block.uni_id() {
-                                        self.in_comment = true;
-                                    }
-
-                                    self.start_level(LangItemKind::Block(block));
-
-                                    let parser = self.last_parser()?;
-
-                                    if let SearchMode::Parser = parser.search_mode() {
-                                        self.update_cursor(ate.len() + buf.len());
-
-                                        match self
-                                            .format_buf(&buf, force_php_level.unwrap_or(last_level))
-                                        {
-                                            Some(buf) => {
-                                                return Some(buf);
-                                            }
-                                            None => {
-                                                buf.clear();
-                                            }
-                                        };
-                                    }
-
-                                    continue 'outer;
-                                }
-                                None => {}
-                            }
-                        }
-
-                        match prev_str {
-                            Some(str_type) => match str_type.end().eat(&mut self.cursor) {
-                                Some(_) => {
-                                    loop {
-                                        match self.last_level()? {
-                                            LangItemKind::String(_) => {
-                                                self.end_level();
-                                                break;
-                                            }
-                                            _ => {
-                                                self.end_level();
-                                            }
-                                        }
-                                    }
-                                    continue;
-                                }
-                                None => {}
                             },
                             None => {}
                         }
                     }
+
+                    let last_level = self.last_level()?.clone();
+
+                    match &last_level {
+                        LangItemKind::String(_) => {}
+                        _ => {
+                            for comment in comments {
+                                match comment.start().eat(&mut self.cursor) {
+                                    Some(ate) => {
+                                        self.start_level(LangItemKind::Comment(comment));
+                                        let parser = self.last_parser()?;
+                                        if let SearchMode::Parser = parser.search_mode() {
+                                            self.update_cursor(ate.len() + buf.len());
+
+                                            match self.format_buf(
+                                                &buf,
+                                                force_php_level.unwrap_or(last_level),
+                                            ) {
+                                                Some(buf) => {
+                                                    return Some(buf);
+                                                }
+                                                None => {
+                                                    buf.clear();
+                                                }
+                                            };
+                                        }
+
+                                        continue 'outer;
+                                    }
+                                    None => {}
+                                }
+                            }
+                        }
+                    }
+
+                    for pattern in ignore {
+                        match pattern.eat(&mut self.cursor) {
+                            Some(ate) => {
+                                let parser = self.last_parser()?;
+                                let last_level = self.last_level()?.clone();
+                                if let SearchMode::Parser = parser.search_mode() {
+                                    self.update_cursor(ate.len() + buf.len());
+                                    match self
+                                        .format_buf(&buf, force_php_level.unwrap_or(last_level))
+                                    {
+                                        Some(buf) => {
+                                            return Some(buf);
+                                        }
+                                        None => {
+                                            buf.clear();
+                                        }
+                                    };
+                                }
+
+                                continue 'outer;
+                            }
+                            None => {}
+                        }
+                    }
+
+                    let last_level = self.last_level()?;
+                    match last_level {
+                        LangItemKind::String(_) => {}
+                        _ => {
+                            for str_type in strs {
+                                match str_type.start().eat(&mut self.cursor) {
+                                    Some(ate) => {
+                                        let last_level = self.last_level()?.clone();
+                                        self.start_level(LangItemKind::String(str_type));
+
+                                        let parser = self.last_parser()?;
+
+                                        if let SearchMode::Parser = parser.search_mode() {
+                                            self.update_cursor(ate.len() + buf.len());
+
+                                            match self.format_buf(
+                                                &buf,
+                                                force_php_level.unwrap_or(last_level),
+                                            ) {
+                                                Some(buf) => {
+                                                    return Some(buf);
+                                                }
+                                                None => buf.clear(),
+                                            };
+                                        }
+
+                                        continue 'outer;
+                                    }
+                                    None => {}
+                                }
+                            }
+                        }
+                    }
+
+                    for parser in parsers {
+                        match parser.start()?.eat(&mut self.cursor) {
+                            Some(ate) => {
+                                let last_level = self.last_level()?.clone();
+                                self.start_level(LangItemKind::Parser(parser));
+
+                                let prev_parser = self.levels.iter().rev().enumerate().find_map(
+                                    |(i, parser)| match parser {
+                                        LangItemKind::Parser(parser) if i != 0 => Some(parser),
+                                        _ => None,
+                                    },
+                                )?;
+
+                                if let SearchMode::Parser = prev_parser.search_mode() {
+                                    self.update_cursor(ate.len() + buf.len());
+
+                                    match self
+                                        .format_buf(&buf, force_php_level.unwrap_or(last_level))
+                                    {
+                                        Some(buf) => {
+                                            return Some(buf);
+                                        }
+                                        None => {
+                                            buf.clear();
+                                        }
+                                    };
+                                }
+
+                                continue 'outer;
+                            }
+                            None => {}
+                        }
+                    }
+
+                    for block in blocks {
+                        match block.start().eat(&mut self.cursor) {
+                            Some(ate) => {
+                                let last_level = self.last_level()?.clone();
+
+                                self.start_level(LangItemKind::Block(block));
+
+                                let parser = self.last_parser()?;
+
+                                if let SearchMode::Parser = parser.search_mode() {
+                                    self.update_cursor(ate.len() + buf.len());
+
+                                    match self
+                                        .format_buf(&buf, force_php_level.unwrap_or(last_level))
+                                    {
+                                        Some(buf) => {
+                                            return Some(buf);
+                                        }
+                                        None => {
+                                            buf.clear();
+                                        }
+                                    };
+                                }
+
+                                continue 'outer;
+                            }
+                            None => {}
+                        }
+                    }
+
+                    match prev_str {
+                        Some(str_type) => match str_type.end().eat(&mut self.cursor) {
+                            Some(_) => {
+                                loop {
+                                    match self.last_level()? {
+                                        LangItemKind::String(_) => {
+                                            self.end_level();
+                                            break;
+                                        }
+                                        _ => {
+                                            self.end_level();
+                                        }
+                                    }
+                                }
+                                continue;
+                            }
+                            None => {}
+                        },
+                        None => {}
+                    }
+
                     let parser = self.last_parser()?;
 
                     match parser.search_mode() {
-                        SearchMode::Parser if !self.in_comment => {
+                        SearchMode::Parser => {
                             let next_char = self.eat_next_chars(1);
 
                             match next_char {
@@ -669,7 +687,6 @@ impl<K: Read + Seek> From<File<K>> for Visitor<K> {
             },
             fake_cur_pos: 0,
             force_php_item: None,
-            in_comment: false,
         }
     }
 }

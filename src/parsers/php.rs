@@ -1,6 +1,6 @@
 use crate::parser::{LangItem, Language, Matcher, Parser, UniId};
-use crate::parsers::html::HTMLParser;
 use crate::parsers::css::CSSParser;
+use crate::parsers::html::HTMLParser;
 use onig::Regex;
 
 #[derive(Clone)]
@@ -22,7 +22,7 @@ impl LangItem for SingleQuoteString {
         "php_single_quote"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::PHPSingleQuoteString
     }
 }
@@ -43,7 +43,7 @@ impl LangItem for DoubleQuoteString {
         "php_double_quote"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::PHPDoubleQuoteString
     }
 }
@@ -64,7 +64,7 @@ impl LangItem for DoubleQuoteStringOnlyTrimmedEnd {
         "php_double_quote"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::PHPDoubleQuoteStringOnlyTrimmedEnd
     }
 }
@@ -85,7 +85,7 @@ impl LangItem for SingleQuoteStringOnlyTrimmedEnd {
         "php_double_quote"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::PHPSingleQuoteStringOnlyTrimmedEnd
     }
 }
@@ -105,7 +105,7 @@ impl LangItem for Scope {
         "php_scope"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::PHPScope
     }
 }
@@ -125,8 +125,50 @@ impl LangItem for Parentheses {
         "php_parentheses"
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::PHPParentheses
+    }
+}
+
+#[derive(Clone)]
+pub struct SingleLineComment;
+
+impl LangItem for SingleLineComment {
+    fn start(&self) -> Matcher {
+        Matcher::new(Some(2), Regex::new("\\/\\/").unwrap())
+    }
+
+    fn end(&self) -> Matcher {
+        Matcher::new(Some(1), Regex::new("\\n").unwrap())
+    }
+
+    fn id(&self) -> &str {
+        "php_single_line_comment"
+    }
+
+    fn uni_id(&self) -> UniId {
+        UniId::PHPSingleLineComment
+    }
+}
+
+#[derive(Clone)]
+pub struct MultiLineComment;
+
+impl LangItem for MultiLineComment {
+    fn start(&self) -> Matcher {
+        Matcher::new(Some(2), Regex::new("\\/\\*").unwrap())
+    }
+
+    fn end(&self) -> Matcher {
+        Matcher::new(Some(2), Regex::new("\\*\\/").unwrap())
+    }
+
+    fn id(&self) -> &str {
+        "php_multi_line_comment"
+    }
+
+    fn uni_id(&self) -> UniId {
+        UniId::PHPMultiLineComment
     }
 }
 
@@ -155,18 +197,25 @@ impl Parser for PHPParser {
         vec![Box::new(Parentheses), Box::new(Scope)]
     }
 
+    fn comments(&self) -> Vec<Box<dyn LangItem>> {
+        vec![Box::new(SingleLineComment), Box::new(MultiLineComment)]
+    }
+
     fn lang(&self) -> Language {
         Language::PHP
     }
 
-    fn ignore(&self)-> Vec<Matcher> {
-        vec!(
+    fn ignore(&self) -> Vec<Matcher> {
+        vec![
             Matcher::new(Some(40), Regex::new("\\[(.*?|)'(.*?|)'(.*?|)\\]").unwrap()),
-            Matcher::new(Some(40), Regex::new("\\[(.*?|)\"(.*?|)\"(.*?|)\\]").unwrap())
-            )
+            Matcher::new(
+                Some(40),
+                Regex::new("\\[(.*?|)\"(.*?|)\"(.*?|)\\]").unwrap(),
+            ),
+        ]
     }
 
-    fn uni_id(&self)-> UniId {
+    fn uni_id(&self) -> UniId {
         UniId::PHPParser
     }
 }
