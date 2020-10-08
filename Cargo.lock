@@ -107,6 +107,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dyn-clone"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c53dc3a653e0f64081026e4bf048d48fec9fce90c66e8326ca7292df0ff2d82"
+
+[[package]]
 name = "env_logger"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -144,10 +150,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "indoc"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "644defcefee68d7805653a682e99a2e2a5014a1fc3cc9be7059a215844eeea6f"
+dependencies = [
+ "unindent",
+]
+
+[[package]]
 name = "ineedtext"
 version = "0.1.0"
 dependencies = [
+ "dyn-clone",
  "glob",
+ "indoc",
  "onig",
 ]
 
@@ -337,6 +354,12 @@ name = "unicode-xid"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7fe0bb3479651439c9112f72b6c505038574c9fbb575ed1bf3b797fa39dd564"
+
+[[package]]
+name = "unindent"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af41d708427f8fd0e915dcebb2cae0f0e6acb2a939b2d399c265c39a38a18942"
 
 [[package]]
 name = "vec_map"

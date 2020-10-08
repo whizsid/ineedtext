@@ -1,103 +1,138 @@
-use crate::parser::{LangItem, Language, Matcher, Parser};
+use crate::parser::{LangItem, Language, Matcher, Parser, UniId};
 use crate::parsers::html::HTMLParser;
 use crate::parsers::php::PHPParser;
+use crate::parsers::css::CSSParser;
 use onig::Regex;
 
+#[derive(Clone)]
 pub struct JSParser;
 
+#[derive(Clone)]
 pub struct SingleQuoteString;
 
 impl LangItem for SingleQuoteString {
     fn start(&self) -> Matcher {
-        Matcher::new(1, Regex::new("'").unwrap())
+        Matcher::new(Some(1), Regex::new("'").unwrap())
     }
 
     fn end(&self) -> Matcher {
-        Matcher::new(1, Regex::new("'").unwrap())
+        Matcher::new(Some(1), Regex::new("'").unwrap())
     }
 
     fn id(&self) -> &str {
         "js_single_quote"
     }
+
+    fn uni_id(&self)-> UniId {
+        UniId::JSSingleQuoteString
+    }
 }
 
+#[derive(Clone)]
 pub struct DoubleQuoteString;
 
 impl LangItem for DoubleQuoteString {
     fn start(&self) -> Matcher {
-        Matcher::new(1, Regex::new("\"").unwrap())
+        Matcher::new(Some(1), Regex::new("\"").unwrap())
     }
 
     fn end(&self) -> Matcher {
-        Matcher::new(1, Regex::new("\"").unwrap())
+        Matcher::new(Some(1), Regex::new("\"").unwrap())
     }
 
     fn id(&self) -> &str {
         "js_double_quote"
     }
+
+    fn uni_id(&self)-> UniId {
+        UniId::JSDoubleQuoteString
+    }
 }
 
+#[derive(Clone)]
 pub struct BacktickString;
 
 impl LangItem for BacktickString {
     fn start(&self) -> Matcher {
-        Matcher::new(1, Regex::new("`").unwrap())
+        Matcher::new(Some(1), Regex::new("`").unwrap())
     }
 
     fn end(&self) -> Matcher {
-        Matcher::new(1, Regex::new("`").unwrap())
+        Matcher::new(Some(1), Regex::new("`").unwrap())
     }
 
     fn id(&self) -> &str {
         "js_backtick"
     }
+
+    fn uni_id(&self)-> UniId {
+        UniId::JSBacktickString
+    }
 }
 
+#[derive(Clone)]
 pub struct Scope;
 impl LangItem for Scope {
     fn start(&self) -> Matcher {
-        Matcher::new(1, Regex::new("{").unwrap())
+        Matcher::new(Some(1), Regex::new("{").unwrap())
     }
 
     fn end(&self) -> Matcher {
-        Matcher::new(1, Regex::new("}").unwrap())
+        Matcher::new(Some(1), Regex::new("}").unwrap())
     }
 
     fn id(&self) -> &str {
         "js_scope"
     }
+
+    fn uni_id(&self)-> UniId {
+        UniId::JSScope
+    }
 }
 
+#[derive(Clone)]
 pub struct Parentheses;
 impl LangItem for Parentheses {
     fn start(&self) -> Matcher {
-        Matcher::new(1, Regex::new("\\(").unwrap())
+        Matcher::new(Some(1), Regex::new("\\(").unwrap())
     }
 
     fn end(&self) -> Matcher {
-        Matcher::new(1, Regex::new("\\)").unwrap())
+        Matcher::new(Some(1), Regex::new("\\)").unwrap())
     }
 
     fn id(&self) -> &str {
         "js_parentheses"
     }
+
+    fn uni_id(&self)-> UniId {
+        UniId::JSParentheses
+    }
 }
 
 impl Parser for JSParser {
     fn start(&self) -> Option<Matcher> {
-        Some(Matcher::new(2, Regex::new("\\${").unwrap()))
+        Some(Matcher::new(Some(20), Regex::new("<script(.*?)>").unwrap()))
+    }
+
+    fn in_string_start(&self)-> Option<Matcher>{
+        Some(Matcher::new(Some(2), Regex::new("\\${").unwrap()))
     }
 
     fn end(&self) -> Option<Matcher> {
-        Some(Matcher::new(1, Regex::new("}").unwrap()))
+        Some(Matcher::new(Some(20), Regex::new("</script(.*?|)>").unwrap()))
+    }
+
+    fn in_string_end(&self) -> Option<Matcher> {
+        Some(Matcher::new(Some(1), Regex::new("}").unwrap()))
     }
 
     fn in_full_str_parsers(&self) -> Vec<Box<dyn Parser>> {
-        vec![Box::new(HTMLParser)]
+        vec![Box::new(HTMLParser), Box::new(CSSParser)]
     }
 
     fn in_str_parsers(&self) -> Vec<Box<dyn Parser>> {
-        vec![Box::new(PHPParser)]
+        vec![Box::new(PHPParser), Box::new(JSParser), Box::new(CSSParser)]
     }
 
     fn in_parser_parsers(&self) -> Vec<Box<dyn Parser>> {
@@ -113,7 +148,7 @@ impl Parser for JSParser {
     }
 
     fn string_check(&self) -> Option<Regex> {
-        Some(Regex::new("(var|;|\\$)").unwrap())
+        Some(Regex::new("(.*?)(var|;|\\$)(.*?)").unwrap())
     }
 
     fn blocks(&self) -> Vec<Box<dyn LangItem>> {
@@ -122,5 +157,9 @@ impl Parser for JSParser {
 
     fn lang(&self) -> Language {
         Language::JS
+    }
+
+    fn uni_id(&self)-> UniId {
+        UniId::JSParser
     }
 }
