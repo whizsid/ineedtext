@@ -11,14 +11,15 @@ pub mod visitor;
 
 use glob::glob;
 use parser::UniId;
-use std::fs::{create_dir_all, OpenOptions};
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::fs::{create_dir_all, remove_dir_all, OpenOptions};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use visitor::{File, Occurrence, Visitor};
 
 fn main() {
     let result_code_base = PathBuf::from("./results/");
+    remove_dir_all(&result_code_base).expect("Can not remove the result folder");
     create_dir_all(&result_code_base).expect("Can not create result folder.");
     let mut po_file = OpenOptions::new()
         .write(true)
@@ -69,6 +70,7 @@ fn main() {
                 let extension = path.extension();
 
                 let file_path = result_code_base.join(&path);
+                let file_path_str = file_path.to_str().unwrap();
                 let mut dir_path = file_path.clone();
                 dir_path.pop();
                 create_dir_all(&dir_path).expect("Can not create directory");
@@ -115,73 +117,84 @@ fn main() {
                                 file.seek(SeekFrom::Start(0))
                                     .expect("Can not seek the file");
 
-                                let f = BufReader::new(file);
+                                let mut f = BufReader::with_capacity(1, file);
                                 let mut occurences_iter = occurences.iter();
                                 let mut last_occurence: Option<&Occurrence> = None;
-                                let mut cursor = 0;
-                                for l in f.lines() {
-                                    let mut line = l.expect("Can not read chars from line");
-                                    line.push('\n');
-                                    let chars = line.chars();
+                                println!(
+                                    "INFO: [{}/{}] Creating the new file {}",
+                                    i + 1,
+                                    total,
+                                    file_path_str
+                                );
 
-                                    for c in chars {
-                                        match last_occurence {
-                                            Some(occ) => {
-                                                if occ.end_cursor == cursor {
-                                                    let formated = match occ.level.uni_id() {
-                                                        UniId::PHPScope
-                                                        | UniId::PHPParser
-                                                        | UniId::PHPParentheses => {
-                                                            format!("local(\"{}\")", occ.txt)
-                                                        }
-                                                        UniId::PHPDoubleQuoteString => {
-                                                            format!("\".local(\"{}\").\"", occ.txt)
-                                                        }
-                                                        UniId::PHPSingleQuoteString => {
-                                                            format!("'.local('{}').'", occ.txt)
-                                                        }
-                                                        UniId::PHPSingleQuoteStringOnlyTrimmedEnd=> {
-                                                            format!("local('{}').'", occ.txt)
-                                                        }
-                                                        UniId::PHPDoubleQuoteStringOnlyTrimmedEnd=> {
-                                                            format!("local(\"{}\").\"", occ.txt)
-                                                        }
-                                                        _ => format!(
-                                                            "<?php echo local('{}')  ?>",
-                                                            occ.txt
-                                                        ),
-                                                    };
+                                let mut cursor: u64 = 0;
+                                loop {
+                                    match f.by_ref().fill_buf() {
+                                        Ok(buf) => match buf.get(0) {
+                                            Some(c) => {
+                                                let c = c.clone() as char;
+                                                match last_occurence {
+                                                    Some(occ) => {
+                                                        if occ.end_cursor == cursor {
+                                                            let formated = match occ.level.uni_id() {
+                                                            UniId::PHPScope | UniId::PHPParser | UniId::PHPParentheses => {
+                                                                format!("local(\"{}\")", occ.txt)
+                                                            }
+                                                            UniId::PHPDoubleQuoteString => {
+                                                                format!("\".local(\"{}\").\"", occ.txt)
+                                                            }
+                                                            UniId::PHPSingleQuoteString => {
+                                                                format!("'.local('{}').'", occ.txt)
+                                                            }
+                                                            UniId::PHPSingleQuoteStringOnlyTrimmedEnd => {
+                                                                format!("local('{}').'", occ.txt)
+                                                            }
+                                                            UniId::PHPDoubleQuoteStringOnlyTrimmedEnd => {
+                                                                format!("local(\"{}\").\"", occ.txt)
+                                                            }
+                                                            _ => format!("<?php echo local('{}')  ?>", occ.txt),
+                                                        };
 
-                                                    new_file
-                                                        .write_all(formated.as_bytes())
-                                                        .unwrap();
+                                                            new_file
+                                                                .write_all(formated.as_bytes())
+                                                                .unwrap();
 
-                                                    match occurences_iter.next() {
-                                                        Some(occ) => {
-                                                            last_occurence = Some(occ);
+                                                            match occurences_iter.next() {
+                                                                Some(occ) => {
+                                                                    last_occurence = Some(occ);
+                                                                }
+                                                                None => {}
+                                                            }
+                                                        }
+                                                    }
+                                                    None => match occurences_iter.next() {
+                                                        Some(oc) => {
+                                                            last_occurence = Some(oc);
                                                         }
                                                         None => {}
+                                                    },
+                                                };
+
+                                                if let Some(occ) = last_occurence {
+                                                    if occ.start_cursor > cursor
+                                                        || occ.end_cursor <= cursor
+                                                    {
+                                                        write!(new_file, "{}", c);
                                                     }
                                                 }
-                                            }
-                                            None => match occurences_iter.next() {
-                                                Some(oc) => {
-                                                    last_occurence = Some(oc);
-                                                }
-                                                None => {}
-                                            },
-                                        };
 
-                                        if let Some(occurence) = last_occurence {
-                                            if occurence.start_cursor > cursor
-                                                || occurence.end_cursor < cursor
-                                            {
-                                                write!(new_file, "{}", c);
+                                                cursor += 1;
                                             }
+                                            _ => {
+                                                break;
+                                            }
+                                        },
+                                        _ => {
+                                            break;
                                         }
-
-                                        cursor += 1;
                                     }
+
+                                    f.consume(1);
                                 }
                             }
                             None => {

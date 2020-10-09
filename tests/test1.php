@@ -43,6 +43,10 @@ if($white_lable_enable =='1'){
 	$favicon_icon=$db->setVal('system_favicon_icon');
 	$image_size='style="width: 160px;height: 80px"';
 }
+
+$php_extension = $db->setVal('extentions');
+
+
 ?>
 
 Some string

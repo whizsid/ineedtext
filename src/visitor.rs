@@ -137,11 +137,14 @@ impl<T: Read + Seek> Visitor<T> {
 
         let one = if escape_quotes { 1 } else { 0 };
 
+        let start_cursor = cursor + cursor_dif - if only_trimmed_end { 1 } else { one };
+        let end_cursor = cursor + one + end_trimmed.len() as u64;
+
         if trimmed.len() > 0 && !can_ignore(&buf) {
             Some(Occurrence {
                 txt: String::from(trimmed),
-                start_cursor: cursor + cursor_dif - if only_trimmed_end { 1 } else { one },
-                end_cursor: cursor + one + end_trimmed.len() as u64,
+                start_cursor,
+                end_cursor,
                 level: if only_trimmed_end {
                     match level.uni_id() {
                         UniId::PHPDoubleQuoteString => {
@@ -322,7 +325,6 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
 
                                     if let SearchMode::Parser = parser.search_mode() {
                                         self.update_cursor(ate.len() + buf.len());
-
                                         match self.format_buf(
                                             &buf,
                                             force_php_level.unwrap_or(level.clone()),

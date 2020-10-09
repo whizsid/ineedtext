@@ -14,7 +14,8 @@ impl LangItem for Tag {
     fn start(&self) -> Matcher {
         Matcher::new(
             None,
-            Regex::new("<(?!(input|img|br|hr))[A-Za-z]+(\\s|)(.*?)[^\\?-]>").unwrap(),
+            Regex::new("<(?!(input|img|br|hr|meta|link|source|embed))[A-Za-z]+(\\s|)(.*?)[^\\?-]>")
+                .unwrap(),
         )
     }
 
@@ -92,10 +93,14 @@ impl Parser for HTMLParser {
         vec![
             Matcher::new(
                 None,
-                Regex::new("<(input|img|br|hr|\\!)(\\s|)(.*?|)[^\\?\\!-]>").unwrap(),
+                Regex::new("<(input|img|br|hr|\\!|meta|link|embed|source)(\\s|)(.*?|)[^\\?\\!-]>")
+                    .unwrap(),
             ),
             Matcher::new(Some(100), Regex::new("<\\/(.*?|)([^\\?\\!]|)>").unwrap()),
-            Matcher::new(Some(30), Regex::new("<\\!([A-Za-z]+)(.*?|)([^\\?\\!-])>").unwrap())
+            Matcher::new(
+                Some(30),
+                Regex::new("<\\!([A-Za-z]+)(.*?|)([^\\?\\!-])>").unwrap(),
+            ),
         ]
     }
 
