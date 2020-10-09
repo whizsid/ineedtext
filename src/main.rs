@@ -50,10 +50,18 @@ fn main() {
     po_file
         .write_all(header.as_bytes())
         .expect("Can not write to PO file");
+    let mut total = 0;
+    println!("INFO: Counting Files");
+    for _entry in glob("./**/*.php").expect("Failed to read glob pattern") {
+        total += 1;
+    }
+    println!("INFO: {} Files found", total);
+    let mut i = 0;
     for entry in glob("./**/*.php").expect("Failed to read glob pattern") {
         match entry {
             Ok(path) => {
                 let path_str = path.to_str().expect("Can not convert the path to str");
+                println!("INFO: [{}/{}] Analyzing file: {} ", i + 1, total, &path_str);
                 let file = OpenOptions::new().read(true).open(&path).unwrap();
 
                 let cursor = Cursor::new(file);
@@ -85,6 +93,22 @@ fn main() {
                                 let mut occurences: Vec<Occurrence> = vec![];
                                 let mut visitor = Visitor::from(file);
                                 for word in &mut visitor {
+                                    write!(
+                                        po_file,
+                                        "\n\n# {}:{}-{}:{:?}\nmsgid \"{}\"\nmsgstr \"{}\"",
+                                        path_str,
+                                        word.start_cursor,
+                                        word.end_cursor,
+                                        word.level,
+                                        word.txt,
+                                        word.txt
+                                    );
+                                    println!(
+                                        "INFO: [{}/{}] Word found: {}",
+                                        i + 1,
+                                        total,
+                                        &word.txt
+                                    );
                                     occurences.push(word);
                                 }
                                 let file = visitor.get_inner();
@@ -132,8 +156,6 @@ fn main() {
                                                         .write_all(formated.as_bytes())
                                                         .unwrap();
 
-                                                    write!(po_file, "\n\n# {}:{}-{}:{:?}\nmsgid \"{}\"\nmsgstr \"{}\"", path_str, occ.start_cursor,  occ.end_cursor, occ.level, occ.txt, occ.txt );
-
                                                     match occurences_iter.next() {
                                                         Some(occ) => {
                                                             last_occurence = Some(occ);
@@ -174,5 +196,6 @@ fn main() {
             }
             Err(e) => println!("{:?}", e),
         }
+        i += 0;
     }
 }

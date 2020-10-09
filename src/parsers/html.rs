@@ -92,9 +92,10 @@ impl Parser for HTMLParser {
         vec![
             Matcher::new(
                 None,
-                Regex::new("<(input|img|br|hr|\\!)(\\s|)(.*?|)[^\\?\\!]>").unwrap(),
+                Regex::new("<(input|img|br|hr|\\!)(\\s|)(.*?|)[^\\?\\!-]>").unwrap(),
             ),
             Matcher::new(Some(100), Regex::new("<\\/(.*?|)([^\\?\\!]|)>").unwrap()),
+            Matcher::new(Some(30), Regex::new("<\\!([A-Za-z]+)(.*?|)([^\\?\\!-])>").unwrap())
         ]
     }
 

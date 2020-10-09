@@ -1,3 +1,51 @@
+<!DOCTYPE HTML>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+
+
+<?php
+
+ /* No cache*/
+header("Cache-Control: no-cache, must-revalidate");
+
+session_start();
+
+
+require_once('db/config.php');
+
+/*classes & libraries*/
+require_once 'classes/dbClass.php';
+$db = new db_functions();
+
+//Get Different subdomain for customers//
+$get_domain_name_data=explode('.',$_SERVER['HTTP_HOST']);
+$get_sub_domain =$get_domain_name_data[0];
+
+$partner_response=$db->checkPartnerDomain($get_sub_domain);
+$white_lable_enable=$partner_response['white_lable_enable'];
+$partner_id=$partner_response['partner_id'];
+
+if($white_lable_enable =='1'){
+
+	$site_title =$db->setValPartner($partner_id,'site_title');
+	$portal_base_url=$db->setValPartner($partner_id,'base_url');
+	$company_logo=$db->setValPartner($partner_id,'company_logo');
+	$company_web=$db->setValPartner($partner_id,'company_web');
+	$favicon_icon='partners/'.$db->setValPartner($partner_id,'system_favicon_icon');
+	$image_size='';
+
+}else{
+
+	$site_title =$db->setVal('site_title');
+	$portal_base_url=$db->setVal('base_url');
+	$company_logo=$db->setVal('company_logo');
+	$company_web=$db->setVal('company_web');
+	$favicon_icon=$db->setVal('system_favicon_icon');
+	$image_size='style="width: 160px;height: 80px"';
+}
+?>
+
+Some string
 <?php require_once "header.php"; ?>
 
 Welcome

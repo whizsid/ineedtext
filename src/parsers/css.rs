@@ -49,7 +49,7 @@ impl Parser for CSSParser {
     }
 
     fn string_check(&self) -> Option<Regex> {
-        Some(Regex::new("(.*|)[a-z-]+(\\s+|):(\\s+|)[a-z-]+(.*|)").unwrap())
+        Some(Regex::new("(.*|)[a-z-]+(\\s+|):(\\s+|)[a-z0-9\\(\\)-\\+]+(.*|)").unwrap())
     }
 
     fn blocks(&self) -> Vec<Box<dyn LangItem>> {

@@ -23,6 +23,8 @@ pub fn can_ignore(txt: &str) -> bool {
         Regex::new("(.*)[a-zA-Z0-9]\\.[a-zA-Z-0-9](.*)").unwrap(),
         Regex::new("(.*)[a-zA-Z0-9]_[a-zA-Z0-9](.*)").unwrap(),
         Regex::new("(.*)[a-zA-Z0-9]-[a-zA-Z0-9](.*)").unwrap(),
+        Regex::new("(.*):(.*)").unwrap(),
+        Regex::new("(.*)[a-zA-Z0-9]\\/(.*)").unwrap(),
         Regex::new("(select|SELECT)(.*?)(from|FROM)(.*)").unwrap(),
         Regex::new("(insert|INSERT)(.*?)(into|INTO)(.*)").unwrap(),
         Regex::new("(DELETE|delete)([\\n\\s]+)(from|FROM)(.*)").unwrap(),
@@ -135,7 +137,7 @@ impl<T: Read + Seek> Visitor<T> {
 
         let one = if escape_quotes { 1 } else { 0 };
 
-        if trimmed.len() > 0 && !can_ignore(&trimmed) {
+        if trimmed.len() > 0 && !can_ignore(&buf) {
             Some(Occurrence {
                 txt: String::from(trimmed),
                 start_cursor: cursor + cursor_dif - if only_trimmed_end { 1 } else { one },
