@@ -130,7 +130,7 @@ fn main() {
 
                                 let mut cursor: u64 = 0;
                                 let mut line_number = 1;
-                                let mut column = 0;
+                                let mut column = 1;
                                 loop {
                                     match f.by_ref().fill_buf() {
                                         Ok(buf) => match buf.get(0) {
@@ -167,21 +167,21 @@ fn main() {
 
                                                             let formated = match occ.level.uni_id() {
                                                                 UniId::PHPScope | UniId::PHPParser | UniId::PHPParentheses => {
-                                                                    format!("local(\"{}\")", txt)
+                                                                    format!("gettext(\"{}\")", txt)
                                                                 }
                                                                 UniId::PHPDoubleQuoteString => {
-                                                                    format!("\".local(\"{}\").\"", txt)
+                                                                    format!("\".gettext(\"{}\").\"", txt)
                                                                 }
                                                                 UniId::PHPSingleQuoteString => {
-                                                                    format!("'.local(\"{}\").'", txt)
+                                                                    format!("'.gettext(\"{}\").'", txt)
                                                                 }
                                                                 UniId::PHPSingleQuoteStringOnlyTrimmedEnd => {
-                                                                    format!("local(\"{}\").'", txt)
+                                                                    format!("gettext(\"{}\").'", txt)
                                                                 }
                                                                 UniId::PHPDoubleQuoteStringOnlyTrimmedEnd => {
-                                                                    format!("local(\"{}\").\"", txt)
+                                                                    format!("gettext(\"{}\").\"", txt)
                                                                 }
-                                                                _ => format!("<?php echo local(\"{}\")  ?>", txt),
+                                                                _ => format!("<?php echo gettext(\"{}\")  ?>", txt),
                                                             };
 
                                                             new_file

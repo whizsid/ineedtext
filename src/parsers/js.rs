@@ -218,10 +218,7 @@ impl Parser for JSParser {
                 Some(300),
                 Regex::new("^\\$(\\s+|)\\([^\\(\\)]*(\\([^\\(\\)]*\\)[^\\)\\(]*)*\\)$").unwrap(),
             ),
-            Matcher::new(
-                Some(200),
-                Regex::new("[^<A-Za-z0-9\\/\"']\\/(.+?)\\/").unwrap(),
-            ),
+            Matcher::new(Some(200), Regex::new("^\\/(.+?)\\/").unwrap()),
         ]
     }
 }
