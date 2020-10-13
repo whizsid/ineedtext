@@ -70,7 +70,7 @@ impl Parser for HTMLParser {
     }
 
     fn string_check(&self) -> Option<Regex> {
-        Some(Regex::new("(.*|)<[A-Za-z]+(\\s|)(.*?)[^\\?]>(.*|)").unwrap())
+        Some(Regex::new("(.*|)<[A-Za-z]+(\\s|)(.*?|)([^\\?]|)>(.*|)").unwrap())
     }
 
     fn blocks(&self) -> Vec<Box<dyn LangItem>> {
@@ -91,6 +91,7 @@ impl Parser for HTMLParser {
 
     fn ignore(&self) -> Vec<Matcher> {
         vec![
+            Matcher::new(Some(8), Regex::new("\\&([a-z]+)\\;").unwrap()),
             Matcher::new(
                 None,
                 Regex::new("<(input|img|br|hr|\\!|meta|link|embed|source)(\\s|)(.*?|)[^\\?\\!-]>")

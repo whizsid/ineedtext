@@ -14,23 +14,61 @@ pub struct Visitor<T: Read + Seek> {
     cursor: Cursor<T>,
     fake_cur_pos: u64,
     force_php_item: Option<UniId>,
+    prev_char: Option<String>,
 }
 
-pub fn can_ignore(txt: &str) -> bool {
+pub fn can_ignore(txt: &str, level: &LangItemKind) -> bool {
     let txt = txt.replace("\n", " ").replace("\t", " ");
 
+    match level.uni_id() {
+        UniId::PHPSingleQuoteString
+        | UniId::PHPDoubleQuoteStringOnlyTrimmedEnd
+        | UniId::PHPDoubleQuoteString
+        | UniId::PHPSingleQuoteStringOnlyTrimmedEnd
+        | UniId::JSSingleQuoteString
+        | UniId::JSDoubleQuoteString
+        | UniId::JSBacktickString => {
+            let one_word_reg = Regex::new("^([a-z0-9]+)$").unwrap();
+
+            if one_word_reg.is_match(&txt.trim()) {
+                return true;
+            }
+
+            let dom_query_reg = Regex::new("^([\\#|\\.])(.*)").unwrap();
+
+            if let UniId::JSDoubleQuoteString | UniId::JSSingleQuoteString = level.uni_id() {
+                if dom_query_reg.is_match(&txt) {
+                    return true;
+                }
+            }
+        }
+        _ => {}
+    }
+
     let patterns = vec![
-        Regex::new("(.*)[a-zA-Z0-9]\\.[a-zA-Z-0-9](.*)").unwrap(),
-        Regex::new("(.*)[a-zA-Z0-9]_[a-zA-Z0-9](.*)").unwrap(),
-        Regex::new("(.*)[a-zA-Z0-9]-[a-zA-Z0-9](.*)").unwrap(),
-        Regex::new("(.*):(.*)").unwrap(),
+        Regex::new("(.*|)[a-zA-Z0-9]\\.[a-zA-Z-0-9](.*|)").unwrap(),
+        Regex::new("(.*|)[a-zA-Z0-9]_[a-zA-Z0-9](.*|)").unwrap(),
+        Regex::new("(.*|)[a-zA-Z0-9]-[a-zA-Z0-9](.*|)").unwrap(),
+        Regex::new("(.*)[:\\=\\<\\>\\{\\}](.*)").unwrap(),
         Regex::new("(.*)[a-zA-Z0-9]\\/(.*)").unwrap(),
+        Regex::new("(.*)[a-z][A-Z](.*)").unwrap(),
+        Regex::new("(.*)[0-9][a-zA-Z](.*)").unwrap(),
+        Regex::new("(.*)[a-zA-Z][0-9](.*)").unwrap(),
         Regex::new("(select|SELECT)(.*?)(from|FROM)(.*)").unwrap(),
         Regex::new("(insert|INSERT)(.*?)(into|INTO)(.*)").unwrap(),
         Regex::new("(DELETE|delete)([\\n\\s]+)(from|FROM)(.*)").unwrap(),
         Regex::new("(UPDATE|update)(.*?)(set|SET)(.*)").unwrap(),
+        Regex::new("(.*|)SHOW(.*?)TABLE(.*)").unwrap(),
+        Regex::new("^[A-Za-z]$").unwrap(),
+        Regex::new("(.*|)\\(\\)(.*|)").unwrap(),
         Regex::new("(.*)\\.php").unwrap(),
         Regex::new("^((?![a-zA-Z]).)*$").unwrap(),
+        Regex::new(
+            "(.*|)(AND|OR|WHERE|VALUES|INTO|ORDER|GROUP|LIMIT|SELECT|IN|\\`|\\&|\\|\\|)(.*|)",
+        )
+        .unwrap(),
+        Regex::new("(POST|GET|json|html)").unwrap(),
+        Regex::new("^([^a-zA-Z]+)$").unwrap(),
     ];
 
     for pattern in patterns {
@@ -49,6 +87,7 @@ impl<T: Read + Seek> Visitor<T> {
             cursor: cur,
             fake_cur_pos: 0,
             force_php_item: None,
+            prev_char: None,
         }
     }
 
@@ -98,7 +137,7 @@ impl<T: Read + Seek> Visitor<T> {
 
         self.cursor.set_position(position + len as u64);
 
-        String::from_utf8(buf).ok()
+        Some(String::from_utf8_lossy(&buf).to_string())
     }
 
     pub fn update_cursor(&mut self, ate: usize) {
@@ -121,7 +160,9 @@ impl<T: Read + Seek> Visitor<T> {
             !c.is_alphanumeric() && c != '.' && c != ')' && c != '\'' && c != '"'
         });
 
-        let trimmed = end_trimmed.trim_start_matches(|c: char| !c.is_alphanumeric() && c != '(');
+        let trimmed = end_trimmed.trim_start_matches(|c: char| {
+            !c.is_alphanumeric() && c != '(' && c != '"' && c != '\''
+        });
 
         let cursor_dif = (end_trimmed.len() - trimmed.len()) as u64;
 
@@ -140,7 +181,7 @@ impl<T: Read + Seek> Visitor<T> {
         let start_cursor = cursor + cursor_dif - if only_trimmed_end { 1 } else { one };
         let end_cursor = cursor + one + end_trimmed.len() as u64;
 
-        if trimmed.len() > 0 && !can_ignore(&buf) {
+        if trimmed.len() > 2 && !can_ignore(&buf, &level) {
             Some(Occurrence {
                 txt: String::from(trimmed),
                 start_cursor,
@@ -172,23 +213,21 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
 
     fn next(&mut self) -> Option<Occurrence> {
         let mut buf = String::new();
-        let mut prev_char: Option<String> = None;
 
         'outer: loop {
             let parser = self.last_parser()?;
             let last_level = self.last_level()?;
+            let escaped = if let Some(prev_char_a) = self.prev_char.clone() {
+                prev_char_a == "\\"
+            } else {
+                false
+            };
 
             match last_level {
                 LangItemKind::String(str_type) if parser.search_mode().is_string() => {
                     let uni_id = str_type.uni_id().clone();
                     let in_str_parsers = parser.in_str_parsers();
                     let full_str_parsers = parser.in_full_str_parsers();
-
-                    let escaped = if let Some(prev_char_a) = prev_char.clone() {
-                        prev_char_a == "\\"
-                    } else {
-                        false
-                    };
 
                     if !escaped {
                         match str_type.end().eat(&mut self.cursor) {
@@ -235,7 +274,7 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
 
                     match next_char {
                         Some(chr) => {
-                            prev_char = Some(chr.clone());
+                            self.prev_char = Some(chr.clone());
                             buf.push_str(&chr)
                         }
                         None => {
@@ -252,10 +291,11 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
                                 }
                                 _ => {}
                             }
+
                             self.start_level(LangItemKind::Parser(parser));
                             self.go_back(buf.len());
                             buf.clear();
-                            prev_char = None;
+                            self.prev_char = None;
                             continue 'outer;
                         }
                     }
@@ -267,7 +307,7 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
                         continue;
                     }
                     None => {
-                        self.eat_next_chars(1);
+                        self.prev_char = Some(self.eat_next_chars(1)?);
                     }
                 },
                 _ => {
@@ -283,6 +323,7 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
                         },
                         None => None,
                     };
+
                     let parser = match last_level {
                         LangItemKind::Parser(parser) => match parser.end() {
                             Some(end) => {
@@ -377,18 +418,13 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
                         _ => unimplemented!(),
                     };
 
-                    let prev_str = self.levels.iter().rev().find_map(|i| match i {
-                        LangItemKind::String(str_type) => Some(str_type),
-                        _ => None,
-                    });
-
                     let parsers = parser.in_parser_parsers();
                     let blocks = parser.blocks();
                     let strs = parser.strings();
                     let ignore = parser.ignore();
                     let comments = parser.comments();
 
-                    if self.levels.len() > 1 {
+                    if self.levels.len() > 1 && !escaped {
                         let opt_before_str = self.levels.iter().rev().find(|i| {
                             if let LangItemKind::String(_) = i {
                                 true
@@ -402,61 +438,49 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
                                 UniId::PHPParser => {}
                                 _ => match before_last_item {
                                     LangItemKind::String(str_type) => {
-                                        let escaped_char =
-                                            if let Some(prev_char_a) = prev_char.clone() {
-                                                prev_char_a == "\\"
-                                            } else {
-                                                false
-                                            };
-
-                                        if !escaped_char {
-                                            match str_type.end().eat(&mut self.cursor) {
-                                                Some(ate) => {
-                                                    let parser: Option<Box<dyn Parser>>;
-                                                    loop {
-                                                        match self.end_level()? {
-                                                            LangItemKind::Parser(removed) => {
-                                                                parser = Some(removed);
-                                                                break;
-                                                            }
-                                                            _ => {}
+                                        match str_type.end().eat(&mut self.cursor) {
+                                            Some(ate) => {
+                                                let parser: Option<Box<dyn Parser>>;
+                                                loop {
+                                                    match self.end_level()? {
+                                                        LangItemKind::Parser(removed) => {
+                                                            parser = Some(removed);
+                                                            break;
                                                         }
+                                                        _ => {}
                                                     }
-
-                                                    let str_type = self.end_level()?;
-
-                                                    let parser = parser?;
-                                                    if let SearchMode::Parser = parser.search_mode()
-                                                    {
-                                                        self.update_cursor(ate.len() + buf.len());
-
-                                                        let level = match str_type.uni_id() {
-                                                            UniId::PHPSingleQuoteString
-                                                            | UniId::PHPDoubleQuoteString => {
-                                                                str_type
-                                                            }
-                                                            _ => LangItemKind::Parser(parser),
-                                                        };
-
-                                                        match self.format_buf(
-                                                            &buf,
-                                                            force_php_level.unwrap_or(level),
-                                                        ) {
-                                                            Some(buf) => {
-                                                                return Some(buf);
-                                                            }
-                                                            None => {
-                                                                buf.clear();
-                                                            }
-                                                        };
-                                                    }
-
-                                                    self.force_php_item = None;
-
-                                                    continue;
                                                 }
-                                                None => {}
+
+                                                let str_type = self.end_level()?;
+
+                                                let parser = parser?;
+                                                if let SearchMode::Parser = parser.search_mode() {
+                                                    self.update_cursor(ate.len() + buf.len());
+
+                                                    let level = match str_type.uni_id() {
+                                                        UniId::PHPSingleQuoteString
+                                                        | UniId::PHPDoubleQuoteString => str_type,
+                                                        _ => LangItemKind::Parser(parser),
+                                                    };
+
+                                                    match self.format_buf(
+                                                        &buf,
+                                                        force_php_level.unwrap_or(level),
+                                                    ) {
+                                                        Some(buf) => {
+                                                            return Some(buf);
+                                                        }
+                                                        None => {
+                                                            buf.clear();
+                                                        }
+                                                    };
+                                                }
+
+                                                self.force_php_item = None;
+
+                                                continue;
                                             }
+                                            None => {}
                                         }
                                     }
                                     _ => {}
@@ -525,8 +549,7 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
                         }
                     }
 
-                    let last_level = self.last_level()?;
-                    match last_level {
+                    match &last_level {
                         LangItemKind::String(_) => {}
                         _ => {
                             for str_type in strs {
@@ -623,27 +646,6 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
                         }
                     }
 
-                    match prev_str {
-                        Some(str_type) => match str_type.end().eat(&mut self.cursor) {
-                            Some(_) => {
-                                loop {
-                                    match self.last_level()? {
-                                        LangItemKind::String(_) => {
-                                            self.end_level();
-                                            break;
-                                        }
-                                        _ => {
-                                            self.end_level();
-                                        }
-                                    }
-                                }
-                                continue;
-                            }
-                            None => {}
-                        },
-                        None => {}
-                    }
-
                     let parser = self.last_parser()?;
 
                     match parser.search_mode() {
@@ -652,7 +654,7 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
 
                             match next_char {
                                 Some(chr) => {
-                                    prev_char = Some(chr.clone());
+                                    self.prev_char = Some(chr.clone());
                                     buf.push_str(&chr)
                                 }
                                 None => {
@@ -661,7 +663,7 @@ impl<T: Read + Seek> Iterator for &mut Visitor<T> {
                             };
                         }
                         _ => {
-                            self.eat_next_chars(1)?;
+                            self.prev_char = Some(self.eat_next_chars(1)?);
                         }
                     }
                 }
@@ -691,6 +693,7 @@ impl<K: Read + Seek> From<File<K>> for Visitor<K> {
             },
             fake_cur_pos: 0,
             force_php_item: None,
+            prev_char: None,
         }
     }
 }

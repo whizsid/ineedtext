@@ -10,6 +10,18 @@ header("Cache-Control: no-cache, must-revalidate");
 
 session_start();
 
+                                        //hfer=\'delete.php?date='.urlencode($edtdate).'&event='.urlencode($edtevent).'&time'.urlencode($edttime).'\'
+                                        //onclick=\'popup3('.$iYear.','.$iMonth.','.$iCurrentDay.',\''.$edtevent.'\',\''.$edttime.'\')\'
+//                elseif ($noEvents>=1)
+//                {
+//                    if($noEvents==$result->num_rows-1)
+//                    {
+//
+//                        $event .='<tr onclick="popup2('.$iYear.','.$iMonth.','.$iCurrentDay.',\''.$eve.'\',\''.$edtevent.'\',\''.$edttime.'\')"><td style="font-weight: lighter; text-align: center">more</td></tr>' ;
+//                    }
+//
+//                }
+
 
 require_once('db/config.php');
 
@@ -58,6 +70,8 @@ Welcome
 
 	$string = "Welcome!";
 
+	 $event .= 'asas\')"><td>';
+                                            
 	// Single Line comment and "Double quotes" and 'Single Quotes' /*  */
 	// Another Single Line comment 'comment'
 
@@ -139,5 +153,27 @@ After Comment
 	var cssString = "display: none";
 
 	var anotherItem = `Another Item ${ "Some Item"; `Another Item` } Other Item`;
-</script>
+
+	$(window).load(function() {
+            $('#loading').hide();
+	});
+
+	var str = "asaas";
+	</script>
+
+   <script language="javascript" >
+        $(window).load(function() {
+            $('#loading').hide();
+        });
+    </script>
+
+
+
+
+    <script language="javascript" type="text/javascript">
+        $(window).load(function() {
+            $('#loading').hide();
+        });
+    </script>
+
 <?php }  require_once "footer.php" ?>

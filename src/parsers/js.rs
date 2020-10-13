@@ -54,11 +54,11 @@ pub struct BacktickString;
 
 impl LangItem for BacktickString {
     fn start(&self) -> Matcher {
-        Matcher::new(Some(1), Regex::new("`").unwrap())
+        Matcher::new(Some(1), Regex::new("\\`").unwrap())
     }
 
     fn end(&self) -> Matcher {
-        Matcher::new(Some(1), Regex::new("`").unwrap())
+        Matcher::new(Some(1), Regex::new("\\`").unwrap())
     }
 
     fn id(&self) -> &str {
@@ -119,7 +119,7 @@ impl LangItem for SingleLineComment {
     }
 
     fn end(&self) -> Matcher {
-        Matcher::new(Some(1), Regex::new("\\n").unwrap())
+        Matcher::new(Some(1), Regex::new("[\\r\\n]").unwrap())
     }
 
     fn id(&self) -> &str {
@@ -154,17 +154,17 @@ impl LangItem for MultiLineComment {
 
 impl Parser for JSParser {
     fn start(&self) -> Option<Matcher> {
-        Some(Matcher::new(Some(20), Regex::new("<script(.*?)>").unwrap()))
+        Some(Matcher::new(None, Regex::new("<script(.*?)>").unwrap()))
     }
 
     fn in_string_start(&self) -> Option<Matcher> {
-        Some(Matcher::new(Some(2), Regex::new("\\${").unwrap()))
+        Some(Matcher::new(Some(2), Regex::new("\\$\\{").unwrap()))
     }
 
     fn end(&self) -> Option<Matcher> {
         Some(Matcher::new(
             Some(20),
-            Regex::new("</script(.*?|)>").unwrap(),
+            Regex::new("<\\/script(.*?|)>").unwrap(),
         ))
     }
 
@@ -210,5 +210,18 @@ impl Parser for JSParser {
 
     fn uni_id(&self) -> UniId {
         UniId::JSParser
+    }
+
+    fn ignore(&self) -> Vec<Matcher> {
+        vec![
+            Matcher::new(
+                Some(300),
+                Regex::new("^\\$(\\s+|)\\([^\\(\\)]*(\\([^\\(\\)]*\\)[^\\)\\(]*)*\\)$").unwrap(),
+            ),
+            Matcher::new(
+                Some(200),
+                Regex::new("[^<A-Za-z0-9\\/\"']\\/(.+?)\\/").unwrap(),
+            ),
+        ]
     }
 }

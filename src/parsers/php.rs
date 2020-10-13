@@ -139,7 +139,7 @@ impl LangItem for SingleLineComment {
     }
 
     fn end(&self) -> Matcher {
-        Matcher::new(Some(1), Regex::new("\\n").unwrap())
+        Matcher::new(Some(1), Regex::new("[\\r\\n]").unwrap())
     }
 
     fn id(&self) -> &str {
@@ -207,10 +207,17 @@ impl Parser for PHPParser {
 
     fn ignore(&self) -> Vec<Matcher> {
         vec![
-            Matcher::new(Some(40), Regex::new("\\[(.*?|)'(.*?|)'(.*?|)\\]").unwrap()),
             Matcher::new(
                 Some(40),
-                Regex::new("\\[(.*?|)\"(.*?|)\"(.*?|)\\]").unwrap(),
+                Regex::new("^\\[[^']*('[^']*'[^']*)*\\]$").unwrap(),
+            ),
+            Matcher::new(
+                Some(40),
+                Regex::new("^\\[[^\"]*(\"[^\"]*\"[^\"]*)*\\]$").unwrap(),
+            ),
+            Matcher::new(
+                Some(300),
+                Regex::new("^if(\\s+|)\\([^\\(\\)]*(\\([^\\(\\)]*\\)[^\\)\\(]*)*\\)$").unwrap(),
             ),
         ]
     }

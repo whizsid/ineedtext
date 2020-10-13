@@ -25,7 +25,7 @@ impl Matcher {
                 file_mut.read(&mut buf).ok()?;
                 for i in 0..buf.len() {
                     let word = &buf[0..i + 1];
-                    let word = String::from_utf8(Vec::from(word)).ok()?;
+                    let word = String::from_utf8_lossy(&word).to_string();
 
                     if self.1.is_match(&word) {
                         let next_offset = start_position + (i + 1) as u64;
@@ -46,7 +46,7 @@ impl Matcher {
 
                     main_buf.push(buf[0]);
 
-                    let word = String::from_utf8(main_buf.to_vec()).ok()?;
+                    let word = String::from_utf8_lossy(&main_buf).to_string();
 
                     if self.1.is_match(&word) {
                         let next_offset = start_position + (i + 1) as u64;

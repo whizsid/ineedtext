@@ -11,6 +11,7 @@ pub mod visitor;
 
 use glob::glob;
 use parser::UniId;
+use std::env::args;
 use std::fs::{create_dir_all, remove_dir_all, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::io::{Cursor, Write};
@@ -18,8 +19,14 @@ use std::path::PathBuf;
 use visitor::{File, Occurrence, Visitor};
 
 fn main() {
-    let result_code_base = PathBuf::from("./results/");
-    remove_dir_all(&result_code_base).expect("Can not remove the result folder");
+    let mut arg = args().into_iter();
+    arg.next().unwrap();
+    let input = &arg.next().unwrap_or(String::from("**/*.php"));
+
+    let output = &arg.next().unwrap_or(String::from("./results"));
+
+    let result_code_base = PathBuf::from(&output);
+    let _removed = remove_dir_all(&result_code_base);
     create_dir_all(&result_code_base).expect("Can not create result folder.");
     let mut po_file = OpenOptions::new()
         .write(true)
@@ -53,12 +60,13 @@ fn main() {
         .expect("Can not write to PO file");
     let mut total = 0;
     println!("INFO: Counting Files");
-    for _entry in glob("./**/*.php").expect("Failed to read glob pattern") {
+    for _entry in glob(input).expect("Failed to read glob pattern") {
         total += 1;
     }
     println!("INFO: {} Files found", total);
     let mut i = 0;
-    for entry in glob("./**/*.php").expect("Failed to read glob pattern") {
+    let mut word_count = 0;
+    for entry in glob(input).expect("Failed to read glob pattern") {
         match entry {
             Ok(path) => {
                 let path_str = path.to_str().expect("Can not convert the path to str");
@@ -94,22 +102,15 @@ fn main() {
                             Some(file) => {
                                 let mut occurences: Vec<Occurrence> = vec![];
                                 let mut visitor = Visitor::from(file);
+
                                 for word in &mut visitor {
-                                    write!(
-                                        po_file,
-                                        "\n\n# {}:{}-{}:{:?}\nmsgid \"{}\"\nmsgstr \"{}\"",
-                                        path_str,
-                                        word.start_cursor,
-                                        word.end_cursor,
-                                        word.level,
-                                        word.txt,
-                                        word.txt
-                                    );
+                                    word_count += 1;
                                     println!(
-                                        "INFO: [{}/{}] Word found: {}",
+                                        "INFO: [{}/{}] {} words found: {}",
                                         i + 1,
                                         total,
-                                        &word.txt
+                                        word_count,
+                                        word.txt
                                     );
                                     occurences.push(word);
                                 }
@@ -128,32 +129,60 @@ fn main() {
                                 );
 
                                 let mut cursor: u64 = 0;
+                                let mut line_number = 1;
+                                let mut column = 0;
                                 loop {
                                     match f.by_ref().fill_buf() {
                                         Ok(buf) => match buf.get(0) {
                                             Some(c) => {
+                                                column += 1;
                                                 let c = c.clone() as char;
+                                                if c == '\n' {
+                                                    line_number += 1;
+                                                    column = 1
+                                                }
+
                                                 match last_occurence {
                                                     Some(occ) => {
                                                         if occ.end_cursor == cursor {
+                                                            let txt = occ
+                                                                .txt
+                                                                .replace("\\'", "'")
+                                                                .replace("\"", "\\\"")
+                                                                .replace("\\\\\"", "\\\"");
+                                                            let po_word = occ
+                                                                .txt
+                                                                .replace('"', "\\\"")
+                                                                .replace("\\\\\"", "\\\"");
+                                                            write!(
+                                                                po_file,
+                                                                "\n\n# File:{} Line:{} Column:{} Level:{:?}\nmsgid \"{}\"\nmsgstr \"{}\"",
+                                                                path_str,
+                                                                line_number,
+                                                                if column < occ.txt.len() {0} else {column-occ.txt.len()},
+                                                                occ.level,
+                                                                po_word,
+                                                                po_word
+                                                            ).unwrap();
+
                                                             let formated = match occ.level.uni_id() {
-                                                            UniId::PHPScope | UniId::PHPParser | UniId::PHPParentheses => {
-                                                                format!("local(\"{}\")", occ.txt)
-                                                            }
-                                                            UniId::PHPDoubleQuoteString => {
-                                                                format!("\".local(\"{}\").\"", occ.txt)
-                                                            }
-                                                            UniId::PHPSingleQuoteString => {
-                                                                format!("'.local('{}').'", occ.txt)
-                                                            }
-                                                            UniId::PHPSingleQuoteStringOnlyTrimmedEnd => {
-                                                                format!("local('{}').'", occ.txt)
-                                                            }
-                                                            UniId::PHPDoubleQuoteStringOnlyTrimmedEnd => {
-                                                                format!("local(\"{}\").\"", occ.txt)
-                                                            }
-                                                            _ => format!("<?php echo local('{}')  ?>", occ.txt),
-                                                        };
+                                                                UniId::PHPScope | UniId::PHPParser | UniId::PHPParentheses => {
+                                                                    format!("local(\"{}\")", txt)
+                                                                }
+                                                                UniId::PHPDoubleQuoteString => {
+                                                                    format!("\".local(\"{}\").\"", txt)
+                                                                }
+                                                                UniId::PHPSingleQuoteString => {
+                                                                    format!("'.local(\"{}\").'", txt)
+                                                                }
+                                                                UniId::PHPSingleQuoteStringOnlyTrimmedEnd => {
+                                                                    format!("local(\"{}\").'", txt)
+                                                                }
+                                                                UniId::PHPDoubleQuoteStringOnlyTrimmedEnd => {
+                                                                    format!("local(\"{}\").\"", txt)
+                                                                }
+                                                                _ => format!("<?php echo local(\"{}\")  ?>", txt),
+                                                            };
 
                                                             new_file
                                                                 .write_all(formated.as_bytes())
@@ -179,7 +208,7 @@ fn main() {
                                                     if occ.start_cursor > cursor
                                                         || occ.end_cursor <= cursor
                                                     {
-                                                        write!(new_file, "{}", c);
+                                                        write!(new_file, "{}", c).unwrap();
                                                     }
                                                 }
 
@@ -209,6 +238,6 @@ fn main() {
             }
             Err(e) => println!("{:?}", e),
         }
-        i += 0;
+        i += 1;
     }
 }
